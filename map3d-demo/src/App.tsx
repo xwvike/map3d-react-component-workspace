@@ -125,6 +125,12 @@ const dataSource: GeoDataSource = async ({ adcode, level, signal }) => {
 export default function App() {
   const mapRef = useRef<Map3DRef>(null);
   const initialNode = useMemo(() => ({ adcode: 100000, level: "country" as const }), []);
+  const drilldownConfig = useMemo(
+    () => ({
+      autoDrilldownOnDoubleClick: true,
+    }),
+    []
+  );
   const [hoverRegion, setHoverRegion] = useState("-");
   const [drillPathText, setDrillPathText] = useState("100000(country)");
   const [eventLog, setEventLog] = useState<string[]>([]);
@@ -225,6 +231,7 @@ export default function App() {
           mode="drilldown"
           dataSource={dataSource}
           initialNode={initialNode}
+          drilldownConfig={drilldownConfig}
           style={{ width: "100%", height: "100%" }}
           assetConfig={{ dracoDecoderPath: "/draco/" }}
           interactionConfig={{ enableHover: true, enableDoubleClick: true }}

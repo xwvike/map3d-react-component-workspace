@@ -47,6 +47,24 @@ type AssetConfig = {
   dracoDecoderPath?: string;
 };
 
+type DrilldownConfig = {
+  autoDrilldownOnDoubleClick?: boolean;
+  getNextLevel?: (current: DrilldownNode, payload: RegionEventPayload) => MapLevel | null;
+  toNode?: (
+    payload: RegionEventPayload,
+    current: DrilldownNode,
+    nextLevel: MapLevel
+  ) => DrilldownNode | null;
+  resolveProjection?: (node: DrilldownNode, baseProjection: Projection) => Projection;
+};
+
+type GeoFeatureAdapter = {
+  getAdcode?: (properties: GeoJsonFeature["properties"]) => number | null;
+  getName?: (properties: GeoJsonFeature["properties"]) => string | undefined;
+  getCenter?: (properties: GeoJsonFeature["properties"]) => [number, number] | undefined;
+  getCentroid?: (properties: GeoJsonFeature["properties"]) => [number, number] | undefined;
+};
+
 const DEFAULT_PROJECTION: Projection = {
   center: [104.0, 37.5],
   scale: 40,
@@ -75,6 +93,24 @@ function nextLevel(level: MapLevel): MapLevel | null {
   return null;
 }
 
+function defaultToNode(
+  payload: RegionEventPayload,
+  _current: DrilldownNode,
+  next: MapLevel,
+  adapter: Required<GeoFeatureAdapter>
+): DrilldownNode | null {
+  const adcode = adapter.getAdcode(payload.properties);
+  if (!adcode) return null;
+
+  return {
+    adcode,
+    level: next,
+    name: adapter.getName(payload.properties),
+    center: adapter.getCenter(payload.properties),
+    centroid: adapter.getCentroid(payload.properties),
+  };
+}
+
 function keyOf(level: MapLevel, adcode: number) {
   return `${level}:${adcode}`;
 }
@@ -92,6 +128,8 @@ export interface Map3DProps {
   assetConfig?: AssetConfig;
   interactionConfig?: InteractionConfig;
   defaultLineCount?: number;
+  geoFeatureAdapter?: GeoFeatureAdapter;
+  drilldownConfig?: DrilldownConfig;
   onRegionHover?: (payload: RegionEventPayload | null) => void;
   onRegionDoubleClick?: (payload: RegionEventPayload) => void;
   onError?: (error: Error) => void;
@@ -127,6 +165,8 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     assetConfig,
     interactionConfig,
     defaultLineCount = 0,
+    geoFeatureAdapter,
+    drilldownConfig,
     onRegionHover,
     onRegionDoubleClick,
     onError,
@@ -146,6 +186,38 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     }),
     [interactionConfig]
   );
+  const featureAdapter = useMemo<Required<GeoFeatureAdapter>>(
+    () => ({
+      getAdcode: (properties) => {
+        const value = properties.adcode;
+        if (typeof value === "number") return value;
+        if (typeof value === "string") {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      },
+      getName: (properties) => {
+        const name = properties.name;
+        return typeof name === "string" ? name : undefined;
+      },
+      getCenter: (properties) => {
+        const center = properties.center;
+        return Array.isArray(center) && center.length === 2
+          ? ([Number(center[0]), Number(center[1])] as [number, number])
+          : undefined;
+      },
+      getCentroid: (properties) => {
+        const centroid = properties.centroid;
+        return Array.isArray(centroid) && centroid.length === 2
+          ? ([Number(centroid[0]), Number(centroid[1])] as [number, number])
+          : undefined;
+      },
+      ...geoFeatureAdapter,
+    }),
+    [geoFeatureAdapter]
+  );
+  const shouldAutoDrilldown = drilldownConfig?.autoDrilldownOnDoubleClick ?? false;
 
   const mapRef = useRef<HTMLDivElement>(null);
   const map2dRef = useRef<HTMLDivElement>(null);
@@ -296,29 +368,30 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     [dataSource, emitDrilldown]
   );
 
-  const updateProjectionFromFeature = useCallback((feature: GeoJsonFeature["properties"]) => {
-    if (!autoFitOnDrilldown) return;
-    const center = feature.centroid ?? feature.center;
-    if (!center) return;
-    const level = feature.level ?? "province";
-    const scale = LEVEL_SCALE[level] ?? DEFAULT_PROJECTION.scale;
-    projectionRef.current = {
-      center,
-      scale,
-    };
-  }, [autoFitOnDrilldown]);
+  const resolveProjectionForNode = useCallback(
+    (node: DrilldownNode, baseProjection: Projection) => {
+      if (drilldownConfig?.resolveProjection) {
+        return drilldownConfig.resolveProjection(node, baseProjection);
+      }
+      if (!autoFitOnDrilldown) {
+        return baseProjection;
+      }
+      return resolveNodeProjection(node, baseProjection);
+    },
+    [autoFitOnDrilldown, drilldownConfig]
+  );
 
   const drillTo = useCallback(
     async (node: DrilldownNode) => {
       if (mode !== "drilldown") return;
       const baseProjection = projection ?? DEFAULT_PROJECTION;
-      projectionRef.current = resolveNodeProjection(node, baseProjection);
+      projectionRef.current = resolveProjectionForNode(node, baseProjection);
       const nextPath = [...pathRef.current, node];
       pathRef.current = nextPath;
       emitDrilldown({ path: nextPath, current: node });
       await loadFromDataSource(node);
     },
-    [emitDrilldown, loadFromDataSource, mode, projection]
+    [emitDrilldown, loadFromDataSource, mode, projection, resolveProjectionForNode]
   );
 
   const drillUp = useCallback(async () => {
@@ -329,40 +402,40 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     pathRef.current = nextPath;
     const current = nextPath[nextPath.length - 1];
     const baseProjection = projection ?? DEFAULT_PROJECTION;
-    projectionRef.current = resolveNodeProjection(current, baseProjection);
+    projectionRef.current = resolveProjectionForNode(current, baseProjection);
     emitDrilldown({ path: nextPath, current });
     await loadFromDataSource(current);
-  }, [emitDrilldown, loadFromDataSource, mode, projection]);
+  }, [emitDrilldown, loadFromDataSource, mode, projection, resolveProjectionForNode]);
 
   const resetDrilldown = useCallback(async () => {
     if (mode !== "drilldown") return;
     pathRef.current = [initialNodeStable];
     emitDrilldown({ path: [initialNodeStable], current: initialNodeStable, error: null });
-    projectionRef.current = resolveNodeProjection(
+    projectionRef.current = resolveProjectionForNode(
       initialNodeStable,
       projection ?? DEFAULT_PROJECTION
     );
     await loadFromDataSource(initialNodeStable);
-  }, [emitDrilldown, initialNodeStable, loadFromDataSource, mode, projection]);
+  }, [emitDrilldown, initialNodeStable, loadFromDataSource, mode, projection, resolveProjectionForNode]);
 
   useEffect(() => {
     if (mode === "static") {
       setResolvedGeoJson(geoJson);
-      projectionRef.current = resolveNodeProjection(
+      projectionRef.current = resolveProjectionForNode(
         initialNodeStable,
         projection ?? DEFAULT_PROJECTION
       );
       return;
     }
 
-    projectionRef.current = resolveNodeProjection(
+    projectionRef.current = resolveProjectionForNode(
       initialNodeStable,
       projection ?? DEFAULT_PROJECTION
     );
     pathRef.current = [initialNodeStable];
     emitDrilldown({ path: [initialNodeStable], current: initialNodeStable, error: null });
     void loadFromDataSource(initialNodeStable);
-  }, [emitDrilldown, geoJson, initialNodeStable, loadFromDataSource, mode, projection]);
+  }, [emitDrilldown, geoJson, initialNodeStable, loadFromDataSource, mode, projection, resolveProjectionForNode]);
 
   useEffect(() => {
     const container = mapRef.current;
@@ -499,18 +572,18 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
       const payload = { properties: propsData };
       onRegionDoubleClickRef.current?.(payload);
 
-      if (mode === "drilldown") {
+      if (mode === "drilldown" && shouldAutoDrilldown) {
         const current = pathRef.current[pathRef.current.length - 1];
-        const next = nextLevel(current.level);
-        if (next && propsData.adcode) {
-          updateProjectionFromFeature(propsData);
-          void drillTo({
-            adcode: Number(propsData.adcode),
-            level: next,
-            name: String(propsData.name ?? ""),
-            center: propsData.center,
-            centroid: propsData.centroid,
-          });
+        const next = drilldownConfig?.getNextLevel
+          ? drilldownConfig.getNextLevel(current, payload)
+          : nextLevel(current.level);
+        if (next) {
+          const node = drilldownConfig?.toNode
+            ? drilldownConfig.toNode(payload, current, next)
+            : defaultToNode(payload, current, next, featureAdapter);
+          if (node) {
+            void drillTo(node);
+          }
         }
       }
     };
@@ -559,7 +632,9 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     mode,
     resetHoveredRegionColor,
     resolvedGeoJson,
-    updateProjectionFromFeature,
+    drilldownConfig,
+    featureAdapter,
+    shouldAutoDrilldown,
   ]);
 
   useImperativeHandle(
