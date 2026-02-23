@@ -1,0 +1,103 @@
+:root {
+  font-family: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #eef4ff;
+  background: radial-gradient(circle at 20% 20%, #213254 0%, #101827 50%, #070b12 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.page {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(20, 30, 48, 0.9), rgba(10, 15, 24, 0.9));
+  border: 1px solid rgba(130, 168, 255, 0.3);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.panel p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #ced9f9;
+}
+
+.group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid rgba(144, 198, 255, 0.6);
+  color: #eaf6ff;
+  background: linear-gradient(180deg, #336cb8, #234a80);
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+.status {
+  background: rgba(12, 24, 42, 0.8);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  display: grid;
+  gap: 4px;
+}
+
+.log {
+  background: rgba(4, 8, 16, 0.75);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 120px;
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  display: grid;
+  gap: 4px;
+  overflow: auto;
+}
+
+.stage {
+  border: 1px solid rgba(130, 168, 255, 0.3);
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0f1e34, #09101c);
+}
+
+@media (max-width: 900px) {
+  .page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+}
