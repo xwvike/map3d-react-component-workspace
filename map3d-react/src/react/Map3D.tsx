@@ -58,6 +58,16 @@ const LEVEL_SCALE: Record<Exclude<MapLevel, "country">, number> = {
   district: 320,
 };
 
+function resolveNodeProjection(node: DrilldownNode, baseProjection: Projection): Projection {
+  if (node.level === "country") {
+    return baseProjection;
+  }
+
+  const center = node.centroid ?? node.center ?? baseProjection.center;
+  const scale = LEVEL_SCALE[node.level] ?? baseProjection.scale;
+  return { center, scale };
+}
+
 function nextLevel(level: MapLevel): MapLevel | null {
   if (level === "country") return "province";
   if (level === "province") return "city";
@@ -125,6 +135,10 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
   } = props;
 
   const mergedTheme = useMemo(() => mergeThemeConfig(themeConfig), [themeConfig]);
+  const initialNodeStable = useMemo(
+    () => initialNode,
+    [initialNode.adcode, initialNode.level]
+  );
   const interactive = useMemo(
     () => ({
       enableHover: Boolean(interactionConfig?.enableHover),
@@ -148,10 +162,10 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
   const lastPickRef = useRef<THREE.Intersection | null>(null);
   const cacheRef = useRef<Map<string, GeoJsonType>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
-  const pathRef = useRef<DrilldownNode[]>([initialNode]);
+  const pathRef = useRef<DrilldownNode[]>([initialNodeStable]);
   const drilldownStateRef = useRef<DrilldownState>({
-    path: [initialNode],
-    current: initialNode,
+    path: [initialNodeStable],
+    current: initialNodeStable,
     loading: false,
     error: null,
   });
@@ -297,12 +311,14 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
   const drillTo = useCallback(
     async (node: DrilldownNode) => {
       if (mode !== "drilldown") return;
+      const baseProjection = projection ?? DEFAULT_PROJECTION;
+      projectionRef.current = resolveNodeProjection(node, baseProjection);
       const nextPath = [...pathRef.current, node];
       pathRef.current = nextPath;
       emitDrilldown({ path: nextPath, current: node });
       await loadFromDataSource(node);
     },
-    [emitDrilldown, loadFromDataSource, mode]
+    [emitDrilldown, loadFromDataSource, mode, projection]
   );
 
   const drillUp = useCallback(async () => {
@@ -312,30 +328,41 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     const nextPath = pathRef.current.slice(0, -1);
     pathRef.current = nextPath;
     const current = nextPath[nextPath.length - 1];
+    const baseProjection = projection ?? DEFAULT_PROJECTION;
+    projectionRef.current = resolveNodeProjection(current, baseProjection);
     emitDrilldown({ path: nextPath, current });
     await loadFromDataSource(current);
-  }, [emitDrilldown, loadFromDataSource, mode]);
+  }, [emitDrilldown, loadFromDataSource, mode, projection]);
 
   const resetDrilldown = useCallback(async () => {
     if (mode !== "drilldown") return;
-    pathRef.current = [initialNode];
-    emitDrilldown({ path: [initialNode], current: initialNode, error: null });
-    projectionRef.current = projection ?? DEFAULT_PROJECTION;
-    await loadFromDataSource(initialNode);
-  }, [emitDrilldown, initialNode, loadFromDataSource, mode, projection]);
+    pathRef.current = [initialNodeStable];
+    emitDrilldown({ path: [initialNodeStable], current: initialNodeStable, error: null });
+    projectionRef.current = resolveNodeProjection(
+      initialNodeStable,
+      projection ?? DEFAULT_PROJECTION
+    );
+    await loadFromDataSource(initialNodeStable);
+  }, [emitDrilldown, initialNodeStable, loadFromDataSource, mode, projection]);
 
   useEffect(() => {
     if (mode === "static") {
       setResolvedGeoJson(geoJson);
-      projectionRef.current = projection ?? DEFAULT_PROJECTION;
+      projectionRef.current = resolveNodeProjection(
+        initialNodeStable,
+        projection ?? DEFAULT_PROJECTION
+      );
       return;
     }
 
-    projectionRef.current = projection ?? DEFAULT_PROJECTION;
-    pathRef.current = [initialNode];
-    emitDrilldown({ path: [initialNode], current: initialNode, error: null });
-    void loadFromDataSource(initialNode);
-  }, [emitDrilldown, geoJson, initialNode, loadFromDataSource, mode, projection]);
+    projectionRef.current = resolveNodeProjection(
+      initialNodeStable,
+      projection ?? DEFAULT_PROJECTION
+    );
+    pathRef.current = [initialNodeStable];
+    emitDrilldown({ path: [initialNodeStable], current: initialNodeStable, error: null });
+    void loadFromDataSource(initialNodeStable);
+  }, [emitDrilldown, geoJson, initialNodeStable, loadFromDataSource, mode, projection]);
 
   useEffect(() => {
     const container = mapRef.current;

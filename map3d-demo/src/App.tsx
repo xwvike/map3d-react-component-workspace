@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Map3D,
   type AnyMapElement,
   type GeoDataSource,
+  type GeoJsonType,
   type Map3DRef,
   type MapLevel,
   type RegionEventPayload,
@@ -15,22 +16,115 @@ const levelScale: Record<MapLevel, number> = {
   district: 320,
 };
 
+function normalizeAdcode(value: number) {
+  const text = String(Math.trunc(value)).padStart(6, "0").slice(0, 6);
+  return Number(text);
+}
+
+function getProvinceAdcode(value: number) {
+  const adcode = normalizeAdcode(value);
+  return Math.floor(adcode / 10000) * 10000;
+}
+
+async function fetchFirstGeoJson(urls: string[], signal: AbortSignal) {
+  for (const url of urls) {
+    const response = await fetch(url, { signal });
+    if (!response.ok) {
+      continue;
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (!contentType.includes("json")) {
+      continue;
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      // 某些 dev server 在缺失静态文件时会返回 HTML 回退页，这里跳过继续尝试下一个候选 URL。
+      continue;
+    }
+  }
+  throw new Error(`GeoJSON not found. Tried: ${urls.join(", ")}`);
+}
+
+function filterGeoJsonByAdcode(geoJson: GeoJsonType, adcode: number) {
+  const features = geoJson.features.filter((feature) => feature.properties.adcode === adcode);
+  return { ...geoJson, features };
+}
+
+function filterGeoJsonByParentAdcode(geoJson: GeoJsonType, parentAdcode: number) {
+  const features = geoJson.features.filter((feature) => {
+    const parent = feature.properties.parent;
+    return parent?.adcode === parentAdcode;
+  });
+  return { ...geoJson, features };
+}
+
 const dataSource: GeoDataSource = async ({ adcode, level, signal }) => {
-  let suffix = "_full.json";
-  if (level === "city" || level === "district") {
-    suffix = "_full_district.json";
+  const safeAdcode = normalizeAdcode(adcode);
+  const provinceAdcode = getProvinceAdcode(safeAdcode);
+
+  if (level === "country") {
+    return fetchFirstGeoJson(
+      ["/geojson/100000_full.json", "/geojson/100000_full_city.json", "/geojson/cn.geojson"],
+      signal
+    );
   }
 
-  const url = `https://web.xtjzx.cn/app/examAnalyze/geojson/${adcode}${suffix}`;
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch geojson: ${response.status}`);
+  if (level === "province") {
+    return fetchFirstGeoJson(
+      [`/geojson/${safeAdcode}_full.json`, `/geojson/${safeAdcode}.json`],
+      signal
+    );
   }
-  return response.json();
+
+  if (level === "city") {
+    const cityGeoJson = await fetchFirstGeoJson(
+      [
+        `/geojson/${safeAdcode}_full_district.json`,
+        `/geojson/${provinceAdcode}_full_district.json`,
+        `/geojson/${safeAdcode}_full.json`,
+        `/geojson/${safeAdcode}.json`,
+      ],
+      signal
+    );
+
+    const filteredByParent = filterGeoJsonByParentAdcode(cityGeoJson, safeAdcode);
+    if (filteredByParent.features.length > 0) {
+      return filteredByParent;
+    }
+
+    return cityGeoJson;
+  }
+
+  const districtGeoJson = await fetchFirstGeoJson(
+    [
+      `/geojson/${safeAdcode}_full_district.json`,
+      `/geojson/${provinceAdcode}_full_district.json`,
+      `/geojson/${safeAdcode}_full.json`,
+      `/geojson/${safeAdcode}.json`,
+      `/geojson/${provinceAdcode}.json`,
+    ],
+    signal
+  );
+
+  const exactDistrict = filterGeoJsonByAdcode(districtGeoJson, safeAdcode);
+  if (exactDistrict.features.length > 0) {
+    return exactDistrict;
+  }
+
+  const districtByParent = filterGeoJsonByParentAdcode(districtGeoJson, safeAdcode);
+  if (districtByParent.features.length > 0) {
+    return districtByParent;
+  }
+
+  return districtGeoJson;
 };
 
 export default function App() {
   const mapRef = useRef<Map3DRef>(null);
+  const initialNode = useMemo(() => ({ adcode: 100000, level: "country" as const }), []);
   const [hoverRegion, setHoverRegion] = useState("-");
   const [drillPathText, setDrillPathText] = useState("100000(country)");
   const [eventLog, setEventLog] = useState<string[]>([]);
@@ -130,7 +224,7 @@ export default function App() {
           ref={mapRef}
           mode="drilldown"
           dataSource={dataSource}
-          initialNode={{ adcode: 100000, level: "country" }}
+          initialNode={initialNode}
           style={{ width: "100%", height: "100%" }}
           assetConfig={{ dracoDecoderPath: "/draco/" }}
           interactionConfig={{ enableHover: true, enableDoubleClick: true }}
