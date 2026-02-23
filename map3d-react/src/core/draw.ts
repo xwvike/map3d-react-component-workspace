@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import * as d3 from "d3";
-import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer";
-import { Line2 } from "three/examples/jsm/lines/Line2";
-import { LineGeometry } from "three/examples/jsm/lines/LineGeometry";
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import type {
   ExtendObject3D,
   GeoJsonFeature,
