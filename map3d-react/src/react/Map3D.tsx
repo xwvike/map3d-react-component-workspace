@@ -362,6 +362,8 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     labelRenderer.setSize(container.clientWidth, container.clientHeight);
     labelRenderer.domElement.style.position = "absolute";
     labelRenderer.domElement.style.top = "0";
+    labelRenderer.domElement.style.left = "0";
+    labelRenderer.domElement.style.pointerEvents = "none";
     labelRendererRef.current = labelRenderer;
     map2dRef.current?.appendChild(labelRenderer.domElement);
 
@@ -402,7 +404,7 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
         onErrorRef.current?.(err);
       });
 
-    controlsRef.current = new OrbitControls(camera, labelRenderer.domElement);
+    controlsRef.current = new OrbitControls(camera, container);
 
     const light = new THREE.PointLight(0xffffff, 1.5);
     light.position.set(0, -5, 30);
@@ -426,8 +428,11 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     const onMouseMove = (event: MouseEvent) => {
       if (!interactive.enableHover || !raycasterRef.current || !cameraRef.current) return;
 
-      pointerRef.current.x = (event.offsetX / container.clientWidth) * 2 - 1;
-      pointerRef.current.y = -(event.offsetY / container.clientHeight) * 2 + 1;
+      const rect = container.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      pointerRef.current.x = (x / rect.width) * 2 - 1;
+      pointerRef.current.y = -(y / rect.height) * 2 + 1;
 
       resetHoveredRegionColor();
       lastPickRef.current = null;
@@ -447,8 +452,15 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
       onRegionHoverRef.current?.({ properties: propsData });
     };
 
-    const onDblClick = () => {
+    const onDblClick = (event: MouseEvent) => {
       if (!interactive.enableDoubleClick || !raycasterRef.current || !cameraRef.current) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      pointerRef.current.x = (x / rect.width) * 2 - 1;
+      pointerRef.current.y = -(y / rect.height) * 2 + 1;
+      raycasterRef.current.setFromCamera(pointerRef.current, cameraRef.current);
 
       const intersects = raycasterRef.current.intersectObjects(scene.children, true);
       const target = intersects.find((item) => item.object.userData.isChangeColor);
@@ -495,16 +507,16 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
     };
     animate();
 
-    renderer.domElement.addEventListener("mousemove", onMouseMove);
-    renderer.domElement.addEventListener("dblclick", onDblClick);
+    container.addEventListener("mousemove", onMouseMove);
+    container.addEventListener("dblclick", onDblClick);
     window.addEventListener("resize", onResize);
 
     onReadyRef.current?.();
 
     return () => {
       mounted = false;
-      renderer.domElement.removeEventListener("mousemove", onMouseMove);
-      renderer.domElement.removeEventListener("dblclick", onDblClick);
+      container.removeEventListener("mousemove", onMouseMove);
+      container.removeEventListener("dblclick", onDblClick);
       window.removeEventListener("resize", onResize);
       destroyRuntime();
     };
@@ -574,8 +586,20 @@ export const Map3D = forwardRef<Map3DRef, Map3DProps>((props, ref) => {
         ...style,
       }}
     >
-      <div ref={map2dRef} />
-      <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+      <div
+        ref={mapRef}
+        style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }}
+      />
+      <div
+        ref={map2dRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+        }}
+      />
     </div>
   );
 });
