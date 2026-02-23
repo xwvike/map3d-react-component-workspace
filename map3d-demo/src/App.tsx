@@ -7,7 +7,7 @@ import {
   type Map3DRef,
   type MapLevel,
   type RegionEventPayload,
-} from "@xtjzx/map3d-react";
+} from "@xwvike/map3d-react";
 
 const levelScale: Record<MapLevel, number> = {
   country: 40,

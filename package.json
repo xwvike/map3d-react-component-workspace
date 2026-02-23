@@ -1,0 +1,12 @@
+{
+  "name": "map3d-react-component-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "setup": "npm --prefix map3d-react install && npm --prefix map3d-demo install",
+    "typecheck": "npm --prefix map3d-react run typecheck && npm --prefix map3d-demo run typecheck",
+    "build": "npm --prefix map3d-react run build && npm --prefix map3d-demo run build",
+    "demo": "npm --prefix map3d-react run build && npm --prefix map3d-demo run dev",
+    "demo:build": "npm --prefix map3d-react run build && npm --prefix map3d-demo run build"
+  }
+}

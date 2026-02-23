@@ -1,17 +1,17 @@
-# @xtjzx/map3d-react
+# @xwvike/map3d-react
 
 Reusable React 3D map component extracted from the existing project and prepared for npm distribution.
 
 ## Install
 
 ```bash
-npm install @xtjzx/map3d-react three d3 gsap
+npm install @xwvike/map3d-react three d3 gsap
 ```
 
 ## Basic usage
 
 ```tsx
-import { Map3D } from "@xtjzx/map3d-react";
+import { Map3D } from "@xwvike/map3d-react";
 
 <Map3D
   mode="drilldown"
