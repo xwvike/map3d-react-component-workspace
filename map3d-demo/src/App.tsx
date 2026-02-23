@@ -61,6 +61,18 @@ function filterGeoJsonByParentAdcode(geoJson: GeoJsonType, parentAdcode: number)
   return { ...geoJson, features };
 }
 
+function getFeatureLevel(value: unknown): MapLevel | null {
+  if (
+    value === "country" ||
+    value === "province" ||
+    value === "city" ||
+    value === "district"
+  ) {
+    return value;
+  }
+  return null;
+}
+
 const dataSource: GeoDataSource = async ({ adcode, level, signal }) => {
   const safeAdcode = normalizeAdcode(adcode);
   const provinceAdcode = getProvinceAdcode(safeAdcode);
@@ -128,6 +140,23 @@ export default function App() {
   const drilldownConfig = useMemo(
     () => ({
       autoDrilldownOnDoubleClick: true,
+      getNextLevel: (
+        current: { level: MapLevel },
+        payload: { properties: Record<string, unknown> }
+      ) => {
+        const featureLevel = getFeatureLevel(payload.properties.level);
+
+        // 直辖市（如北京/上海/天津/重庆）在省级数据里通常直接就是 district，
+        // 这时不再强制走 province -> city -> district 三层链路，避免错误下钻。
+        if (current.level === "province" && featureLevel === "district") {
+          return null;
+        }
+
+        if (current.level === "country") return "province";
+        if (current.level === "province") return "city";
+        if (current.level === "city") return "district";
+        return null;
+      },
     }),
     []
   );
