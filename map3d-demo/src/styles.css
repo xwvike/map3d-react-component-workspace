@@ -93,6 +93,34 @@ button:hover {
   border-radius: 14px;
   overflow: hidden;
   background: linear-gradient(180deg, #0f1e34, #09101c);
+  position: relative;
+}
+
+.hover-tooltip {
+  position: absolute;
+  min-width: 180px;
+  max-width: 240px;
+  border-radius: 10px;
+  border: 1px solid rgba(123, 191, 255, 0.6);
+  background: linear-gradient(180deg, rgba(14, 29, 52, 0.95), rgba(9, 16, 30, 0.96));
+  color: #eaf4ff;
+  padding: 8px 10px;
+  pointer-events: none;
+  box-shadow: 0 10px 30px rgba(3, 11, 25, 0.45);
+  z-index: 20;
+}
+
+.hover-tooltip-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #c8e3ff;
+}
+
+.hover-tooltip-item {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #d8e6ff;
 }
 
 @media (max-width: 900px) {

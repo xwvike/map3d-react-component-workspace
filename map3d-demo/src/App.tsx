@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   Map3D,
   type AnyMapElement,
@@ -161,8 +161,28 @@ export default function App() {
     []
   );
   const [hoverRegion, setHoverRegion] = useState("-");
+  const [hoverPayload, setHoverPayload] = useState<RegionEventPayload | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [drillPathText, setDrillPathText] = useState("100000(country)");
   const [eventLog, setEventLog] = useState<string[]>([]);
+
+  const hoverStats = useMemo(() => {
+    if (!hoverPayload) return null;
+    const adcode = Number(hoverPayload.properties.adcode ?? 0);
+    if (!Number.isFinite(adcode) || adcode <= 0) return null;
+
+    // demo 数据：用 adcode 做稳定映射，便于演示 tooltip 内容。
+    const signups = 1200 + (adcode % 9000);
+    const passRate = 58 + (adcode % 35);
+    const increase = ((adcode % 23) - 7).toFixed(1);
+
+    return {
+      adcode,
+      signups,
+      passRate,
+      increase,
+    };
+  }, [hoverPayload]);
 
   const appendLog = useCallback((line: string) => {
     setEventLog((prev) => [line, ...prev].slice(0, 8));
@@ -224,6 +244,23 @@ export default function App() {
     [appendLog]
   );
 
+  const handleStageMouseMove = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (!hoverPayload) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      setMousePos({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    },
+    [hoverPayload]
+  );
+
+  const handleStageMouseLeave = useCallback(() => {
+    setHoverPayload(null);
+    setHoverRegion("-");
+  }, []);
+
   return (
     <div className="page">
       <aside className="panel">
@@ -254,7 +291,11 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="stage">
+      <main
+        className="stage"
+        onMouseMove={handleStageMouseMove}
+        onMouseLeave={handleStageMouseLeave}
+      >
         <Map3D
           ref={mapRef}
           mode="drilldown"
@@ -265,7 +306,9 @@ export default function App() {
           assetConfig={{ dracoDecoderPath: "/draco/" }}
           interactionConfig={{ enableHover: true, enableDoubleClick: true }}
           onRegionHover={(payload) => {
-            setHoverRegion(payload?.properties?.name ? String(payload.properties.name) : "-");
+            const hasRegion = Boolean(payload?.properties?.name);
+            setHoverRegion(hasRegion ? String(payload?.properties?.name) : "-");
+            setHoverPayload(hasRegion ? payload : null);
           }}
           onRegionDoubleClick={handleDoubleClick}
           onDrilldownChange={(state) => {
@@ -278,6 +321,22 @@ export default function App() {
             appendLog("map ready");
           }}
         />
+
+        {hoverPayload && hoverStats ? (
+          <div
+            className="hover-tooltip"
+            style={{
+              left: `${mousePos.x + 16}px`,
+              top: `${mousePos.y + 16}px`,
+            }}
+          >
+            <div className="hover-tooltip-title">{String(hoverPayload.properties.name ?? "未知区域")}</div>
+            <div className="hover-tooltip-item">区域码: {hoverStats.adcode}</div>
+            <div className="hover-tooltip-item">报名人数: {hoverStats.signups}</div>
+            <div className="hover-tooltip-item">通过率: {hoverStats.passRate}%</div>
+            <div className="hover-tooltip-item">同比变化: {hoverStats.increase}%</div>
+          </div>
+        ) : null}
       </main>
     </div>
   );
